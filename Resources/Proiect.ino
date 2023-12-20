@@ -162,7 +162,7 @@ const unsigned long debounceDelay = 200;
 bool buttonState = false;
 unsigned long lastDebounceTime = 0;
 bool lastButtonState = HIGH;
-bool infoScreen2Flag = false;  // flag for displaying info on screen 2
+bool infoScreen2Flag = false;
 
 // Bullet variables
 int bulletPos = 0;
@@ -178,7 +178,7 @@ int wallsDestroyed = 0;
 unsigned long timePlayedStart = 0;
 unsigned long timePlayed = 0;
 const unsigned long timeLimit = 60000;
-int timeLeft = 0;  // in seconds
+int timeLeft = 0;
 unsigned long lastUpdateTime = 0;
 unsigned long timeElapsed = 0;
 unsigned long lastBlinkMillis = 0;
@@ -376,21 +376,6 @@ void loadSettings() {
   lc.setIntensity(0, matrixBrightness);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Display Matrix Pattern
-
-void displayMatrixPattern(uint64_t pattern) {
-  for (int row = 0; row < matrixSize; row++) {
-    uint8_t rowValue = (pattern >> (matrixSize * row)) & 0xFF;  // Extract each row
-
-    for (int col = 0; col < matrixSize; col++) {
-      // Extract each bit from left to right and set the LED state
-      bool pixel = rowValue & (1 << col);
-      lc.setLed(0, row, col, pixel);
-    }
-  }
-}
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void setup() {
   pinMode(pinBuzzer, OUTPUT);
@@ -413,11 +398,16 @@ void setup() {
   lcd.createChar(4, heart);
   lcd.createChar(5, selectArrow);
 }
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Loop
 
-// Generare mapa
+void loop() {
+  handleMenuLogic();
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Map generation functions
 void generateRandomMap() {
-  // Clear any existing walls
   memset(walls, 0, sizeof(walls));
 
   if (gameDifficulty == EASY) {
@@ -476,7 +466,7 @@ bool isLeftEdgeOfRightQuarters(int position) {
 bool isTopRowOfBottomQuarters(int position) {
   // Check if position is in the top row of the BOTTOM quarters
   return (position >= 128 && position <= 143);
-}
+}  // functions to permit the player to have space to traverse through rooms
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Highscore functions
@@ -609,14 +599,12 @@ void handleNameInput() {
     }
   }
 
-  // Update the current character in the name
   if (charIndexes[letterIndex] < 26) {
     currentName[letterIndex] = 'A' + charIndexes[letterIndex];
   } else {
     currentName[letterIndex] = '0' + (charIndexes[letterIndex] - 26);
   }
 
-  // Handle up/down movements to change the position in the name
   if ((yValue < minValue && prevYValue >= minValue) || (yValue > maxValue && prevYValue <= maxValue)) {
     letterIndex = constrain(letterIndex + (yValue < minValue ? 1 : -1), 0, 3);
     menuNeedsUpdate = true;
@@ -627,10 +615,10 @@ void handleNameInput() {
     if (millis() - lastDebounceTime > debounceDelay) {
       Highscore playerHighscore;
       strncpy(playerHighscore.playerName, currentName, sizeof(playerHighscore.playerName));
-      playerHighscore.playerName[4] = '\0';  // Ensure null termination
+      playerHighscore.playerName[4] = '\0';
       playerHighscore.score = score;
-      insertHighscore(playerHighscore);  // Insert new highscore
-      updateHighscores();                // Update the highscores array
+      insertHighscore(playerHighscore);
+      updateHighscores();
       lastDebounceTime = millis();
       menuNeedsUpdate = true;
     }
@@ -659,83 +647,19 @@ void displayCurrentName() {
   lcd.setCursor(letterIndex, 1);
   lcd.cursor();
 }
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// LCD and Menu functions
-
-void handleMenuNavigation() {
-  int previousMenuItem = currentMenuItem;
-  xValue = analogRead(pinX);
-
-  if (xValue > maxValue && prevXValue <= maxValue) {
-    if (currentMenuState == MAIN_MENU) {
-      currentMenuItem++;
-      if (currentMenuItem >= NUM_MENU_ITEMS) {
-        currentMenuItem = NUM_MENU_ITEMS - 1;  // Limit scrolling to the last menu item
-      }
-    } else if (currentMenuState == ABOUT_SUBMENU) {
-      currentMenuItem++;
-      if (currentMenuItem >= NUM_ABOUT_ITEMS) {
-        currentMenuItem = NUM_ABOUT_ITEMS - 1;  // Limit scrolling to the last menu item
-      }
-    } else if (currentMenuState == SETTINGS_SUBMENU) {
-      currentMenuItem++;
-      if (currentMenuItem >= NUM_SETTINGS_ITEMS) {
-        currentMenuItem = NUM_SETTINGS_ITEMS - 1;  // Limit scrolling to the last menu item
-      }
-    } else if (currentMenuState == HTP_SUBMENU) {
-      currentMenuItem++;
-      if (currentMenuItem >= NUM_HTP_ITEMS) {
-        currentMenuItem = NUM_HTP_ITEMS - 1;  // Limit scrolling to the last menu item
-      }
-    } else if (currentMenuState == HIGHSCORES_SUBMENU) {
-      currentMenuItem++;
-      if (currentMenuItem >= NUM_H_ITEMS) {
-        currentMenuItem = NUM_H_ITEMS - 1;  // Limit scrolling to the last menu item
-      }
-    } else if (currentMenuState == SOUND_ADJUST) {
-      currentMenuItem++;
-      if (currentMenuItem >= NUM_SOUND_ITEMS) {
-        currentMenuItem = NUM_SOUND_ITEMS - 1;  // Limit scrolling to the last menu item
-      }
-    } else if (currentMenuState == SCREEN_2_INFO) {
-      currentMenuItem++;
-      if (currentMenuItem >= NUM_INFO_ITEMS) {
-        currentMenuItem = NUM_INFO_ITEMS - 1;  // Limit scrolling to the last menu item
-      }
-    } else if (currentMenuState == DIFFICULTY_SUBMENU) {
-      currentMenuItem++;
-      if (currentMenuItem >= NUM_DIF_ITEMS) {
-        currentMenuItem = NUM_DIF_ITEMS - 1;  // Limit scrolling to the last menu item
-      }
-    }
-  }
-
-  if (xValue < minValue && prevXValue >= minValue) {
-    currentMenuItem--;
-    if (currentMenuItem <= 0) {
-      currentMenuItem = 0;  // Limit scrolling to the first menu item
-    }
-  }
-
-  prevXValue = xValue;
-
-  if (currentMenuItem != previousMenuItem) {
-    menuNeedsUpdate = true;
-    playSound();
-  }
-}
-
+// Adjust functions
 void adjustMatrixBrightness() {
   yValue = analogRead(pinY);
 
-  // Adjust brightness based on joystick movement
   if (yValue > maxValue && prevYValue <= maxValue && tempMatrixBrightness > 0) {
     tempMatrixBrightness--;
-    lc.setIntensity(0, tempMatrixBrightness);  // Update matrix brightness immediately
+    lc.setIntensity(0, tempMatrixBrightness);
     menuNeedsUpdate = true;
   } else if (yValue < minValue && prevYValue >= minValue && tempMatrixBrightness < maxMatrixBrightness) {
     tempMatrixBrightness++;
-    lc.setIntensity(0, tempMatrixBrightness);  // Update matrix brightness immediately
+    lc.setIntensity(0, tempMatrixBrightness);
     menuNeedsUpdate = true;
   }
   prevYValue = yValue;
@@ -750,20 +674,19 @@ void adjustMatrixBrightness() {
       lastDebounceTime = millis();
     }
   }
-  lastButtonState = currentButtonState;  // Update the last button state
+  lastButtonState = currentButtonState;
 }
 
 void adjustLcdContrast() {
   yValue = analogRead(pinY);
-  stepSize = maxContrast / maxLCDDisplayLength;  // Dividing the PWM range into 16 steps
+  stepSize = maxContrast / maxLCDDisplayLength;
 
-  // Increase brightness
   if (yValue > maxValue && prevYValue <= maxValue && tempLcdContrast - stepSize > 0) {
     tempLcdContrast -= stepSize;
     analogWrite(contrastPin, tempLcdContrast);
     menuNeedsUpdate = true;
   }
-  // Decrease brightness
+
   else if (yValue < minValue && prevYValue >= minValue && tempLcdContrast <= maxContrast) {
     tempLcdContrast += stepSize;
     analogWrite(contrastPin, tempLcdContrast);
@@ -788,14 +711,11 @@ void adjustLcdBrightness() {
   yValue = analogRead(pinY);
   stepSize = maxBrightness / maxLCDDisplayLength;
 
-  // Increase brightness
   if (yValue > maxValue && prevYValue <= maxValue && tempLcdBrightness - stepSize > 0) {
     tempLcdBrightness -= stepSize;
     analogWrite(bightnessPin, tempLcdBrightness);
     menuNeedsUpdate = true;
-  }
-  // Decrease brightness
-  else if (yValue < minValue && prevYValue >= minValue && tempLcdBrightness <= maxBrightness - stepSize) {
+  } else if (yValue < minValue && prevYValue >= minValue && tempLcdBrightness <= maxBrightness - stepSize) {
     tempLcdBrightness += stepSize;
     analogWrite(bightnessPin, tempLcdBrightness);
     menuNeedsUpdate = true;
@@ -815,27 +735,92 @@ void adjustLcdBrightness() {
   lastButtonState = currentButtonState;
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// LCD and Menu functions
+
+void handleMenuNavigation() {
+  int previousMenuItem = currentMenuItem;
+  xValue = analogRead(pinX);
+
+  if (xValue > maxValue && prevXValue <= maxValue) {
+    if (currentMenuState == MAIN_MENU) {
+      currentMenuItem++;
+      if (currentMenuItem >= NUM_MENU_ITEMS) {
+        currentMenuItem = NUM_MENU_ITEMS - 1;  // limit the menu scrolling to the last item
+      }
+    } else if (currentMenuState == ABOUT_SUBMENU) {
+      currentMenuItem++;
+      if (currentMenuItem >= NUM_ABOUT_ITEMS) {
+        currentMenuItem = NUM_ABOUT_ITEMS - 1;
+      }
+    } else if (currentMenuState == SETTINGS_SUBMENU) {
+      currentMenuItem++;
+      if (currentMenuItem >= NUM_SETTINGS_ITEMS) {
+        currentMenuItem = NUM_SETTINGS_ITEMS - 1;
+      }
+    } else if (currentMenuState == HTP_SUBMENU) {
+      currentMenuItem++;
+      if (currentMenuItem >= NUM_HTP_ITEMS) {
+        currentMenuItem = NUM_HTP_ITEMS - 1;
+      }
+    } else if (currentMenuState == HIGHSCORES_SUBMENU) {
+      currentMenuItem++;
+      if (currentMenuItem >= NUM_H_ITEMS) {
+        currentMenuItem = NUM_H_ITEMS - 1;
+      }
+    } else if (currentMenuState == SOUND_ADJUST) {
+      currentMenuItem++;
+      if (currentMenuItem >= NUM_SOUND_ITEMS) {
+        currentMenuItem = NUM_SOUND_ITEMS - 1;
+      }
+    } else if (currentMenuState == SCREEN_2_INFO) {
+      currentMenuItem++;
+      if (currentMenuItem >= NUM_INFO_ITEMS) {
+        currentMenuItem = NUM_INFO_ITEMS - 1;
+      }
+    } else if (currentMenuState == DIFFICULTY_SUBMENU) {
+      currentMenuItem++;
+      if (currentMenuItem >= NUM_DIF_ITEMS) {
+        currentMenuItem = NUM_DIF_ITEMS - 1;
+      }
+    }
+  }
+
+  if (xValue < minValue && prevXValue >= minValue) {
+    currentMenuItem--;
+    if (currentMenuItem <= 0) {
+      currentMenuItem = 0;  // Limit scrolling to the first menu item
+    }
+  }
+
+  prevXValue = xValue;
+
+  if (currentMenuItem != previousMenuItem) {
+    menuNeedsUpdate = true;
+    playSound();
+  }
+}
+
+
 void displayMenu() {
-  // Clear the LCD only if necessary to avoid flickering
   if (menuNeedsUpdate) {
     lcd.clear();
     lcd.setCursor(0, 0);
     if (currentMenuState == MAIN_MENU) {
-      // Display "Main Menu" with scroll indicators
       lcd.setCursor(0, 0);
       lcd.print("Main Menu ");
       if (currentMenuItem == 0)
-        lcd.write((byte)0);  // Display arrowDown
+        lcd.write((byte)0);
       else if (currentMenuItem == NUM_MENU_ITEMS - 1)
-        lcd.write((byte)1);  // Display arrowUP
+        lcd.write((byte)1);
       else
-        lcd.write((byte)2);  // Display doubleArrows
+        lcd.write((byte)2);
 
-      // Display the current menu item
+
       lcd.setCursor(0, 1);
       switch (currentMenuItem) {
         case START_GAME:
-          lcd.write((byte)5);  // Display selectArrow
+          lcd.write((byte)5);
           lcd.print("Start Game");
           displayMatrixPattern(matrixPatterns[1]);
           break;
@@ -869,13 +854,12 @@ void displayMenu() {
       lcd.setCursor(0, 0);
       lcd.print("Difficulty ");
       if (currentMenuItem == 0)
-        lcd.write((byte)0);  // Display arrowDown
+        lcd.write((byte)0);
       else if (currentMenuItem == NUM_DIF_ITEMS - 1)
-        lcd.write((byte)1);  // Display arrowUP
+        lcd.write((byte)1);
       else
-        lcd.write((byte)2);  // Display doubleArrows
+        lcd.write((byte)2);
 
-      // Display the current menu item
       lcd.setCursor(0, 1);
       switch (currentMenuItem) {
         case EASY:
@@ -912,13 +896,12 @@ void displayMenu() {
       lcd.setCursor(0, 0);
       lcd.print("Highscores ");
       if (currentMenuItem == 0)
-        lcd.write((byte)0);  // Display arrowDown
+        lcd.write((byte)0);
       else if (currentMenuItem == NUM_H_ITEMS - 1)
-        lcd.write((byte)1);  // Display arrowUP
+        lcd.write((byte)1);
       else
-        lcd.write((byte)2);  // Display doubleArrows
+        lcd.write((byte)2);
 
-      // Display the current menu item
       lcd.setCursor(0, 1);
       switch (currentMenuItem) {
         case H1:
@@ -961,17 +944,15 @@ void displayMenu() {
           break;
       }
     } else if (currentMenuState == SETTINGS_SUBMENU) {
-      // Display "Settings" with scroll indicators
       lcd.setCursor(0, 0);
       lcd.print("Settings ");
       if (currentMenuItem == 0)
-        lcd.write((byte)0);  // Display arrowDown
+        lcd.write((byte)0);
       else if (currentMenuItem == NUM_SETTINGS_ITEMS - 1)
-        lcd.write((byte)1);  // Display arrowUP
+        lcd.write((byte)1);
       else
-        lcd.write((byte)2);  // Display doubleArrows
+        lcd.write((byte)2);
 
-      // Display the current settings item
       lcd.setCursor(0, 1);
       lcd.write((byte)5);
       switch (currentMenuItem) {
@@ -995,13 +976,12 @@ void displayMenu() {
       lcd.setCursor(0, 0);
       lcd.print("About ");
       if (currentMenuItem == 0)
-        lcd.write((byte)0);  // Display arrowDown
+        lcd.write((byte)0);
       else if (currentMenuItem == NUM_ABOUT_ITEMS - 1)
-        lcd.write((byte)1);  // Display arrowUP
+        lcd.write((byte)1);
       else
-        lcd.write((byte)2);  // Display doubleArrows
+        lcd.write((byte)2);
 
-      // Display the current menu item
       lcd.setCursor(0, 1);
       switch (currentMenuItem) {
         case GAME_NAME:
@@ -1022,13 +1002,12 @@ void displayMenu() {
       lcd.setCursor(0, 0);
       lcd.print("How to play ");
       if (currentMenuItem == 0)
-        lcd.write((byte)0);  // Display arrowDown
+        lcd.write((byte)0);
       else if (currentMenuItem == NUM_HTP_ITEMS - 1)
-        lcd.write((byte)1);  // Display arrowUP
+        lcd.write((byte)1);
       else
-        lcd.write((byte)2);  // Display doubleArrows
+        lcd.write((byte)2);
 
-      // Display the current menu item
       lcd.setCursor(0, 1);
       switch (currentMenuItem) {
         case HTP_1:
@@ -1075,13 +1054,12 @@ void displayMenu() {
       lcd.setCursor(0, 0);
       lcd.print("Sound ");
       if (currentMenuItem == 0)
-        lcd.write((byte)0);  // Display arrowDown
+        lcd.write((byte)0);
       else if (currentMenuItem == NUM_SOUND_ITEMS - 1)
-        lcd.write((byte)1);  // Display arrowUP
+        lcd.write((byte)1);
       else
-        lcd.write((byte)2);  // Display doubleArrows
+        lcd.write((byte)2);
 
-      // Display the current menu item
       lcd.setCursor(0, 1);
       switch (currentMenuItem) {
         case SWITCH_ON_OFF:
@@ -1102,12 +1080,12 @@ void displayMenu() {
       lcd.setCursor(0, 0);
       lcd.print("Game Info ");
       if (currentMenuItem == 0)
-        lcd.write((byte)0);  // Display arrowDown
+        lcd.write((byte)0);
       else if (currentMenuItem == NUM_INFO_ITEMS - 1)
-        lcd.write((byte)1);  // Display arrowUP
+        lcd.write((byte)1);
       else
-        lcd.write((byte)2);  // Display doubleArrows
-      // Display the current menu item
+        lcd.write((byte)2);
+
       lcd.setCursor(0, 1);
       switch (currentMenuItem) {
         case SCREEN_2_INFO_1:
@@ -1157,10 +1135,9 @@ void displayMenu() {
   }
 }
 
-void selectMenuItem() {
+void selectMenuItem() { //function that handles selection when when button is pressed in Menu state
   switch (currentMenuState) {
     case MAIN_MENU:
-      // Handle main menu item selection
       switch (currentMenuItem) {
         case START_GAME:
           currentState = GAME;
@@ -1309,42 +1286,6 @@ void selectMenuItem() {
   menuNeedsUpdate = true;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Display functions
-void displayWallsLeft() {
-  lcd.setCursor(0, 1);
-  lcd.print("Walls left: ");
-  lcd.print(wallsLeft());
-}
-
-void displayScore() {
-  lcd.setCursor(0, 0);
-  lcd.print("Score: ");
-  lcd.print(score);
-}
-
-void displayTimeLeft() {
-  unsigned long currentTime = millis();
-  timeElapsed = currentTime - timePlayedStart;
-  timeLeft = (timeLimit - timeElapsed) / second;
-
-  lcd.setCursor(0, 0);
-  lcd.print("Time left: ");
-  lcd.print(timeLeft);
-  lcd.print("s");
-  menuNeedsUpdate = true;
-}
-
-void displayGameOver() {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Congratulations!");
-  lcd.write((byte)3);
-  lcd.setCursor(0, 1);
-  lcd.print("Score: ");
-  lcd.print(score);
-}
-
 void handleMenuLogic() {
   if (currentState == MENU) {
     if (currentMenuState == MATRIX_BRIGHTNESS_ADJUST) {
@@ -1385,16 +1326,63 @@ void handleMenuLogic() {
   }
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Display functions
+void displayWallsLeft() {
+  lcd.setCursor(0, 1);
+  lcd.print("Walls left: ");
+  lcd.print(wallsLeft());
+}
+
+void displayScore() {
+  lcd.setCursor(0, 0);
+  lcd.print("Score: ");
+  lcd.print(score);
+}
+
+void displayTimeLeft() {
+  unsigned long currentTime = millis();
+  timeElapsed = currentTime - timePlayedStart;
+  timeLeft = (timeLimit - timeElapsed) / second;
+
+  lcd.setCursor(0, 0);
+  lcd.print("Time left: ");
+  lcd.print(timeLeft);
+  lcd.print("s");
+  menuNeedsUpdate = true;
+}
+
+void displayGameOver() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Congratulations!");
+  lcd.write((byte)3);
+  lcd.setCursor(0, 1);
+  lcd.print("Score: ");
+  lcd.print(score);
+}
+
+void displayMatrixPattern(uint64_t pattern) {
+  for (int row = 0; row < matrixSize; row++) {
+    uint8_t rowValue = (pattern >> (matrixSize * row)) & 0xFF;
+
+    for (int col = 0; col < matrixSize; col++) {
+      bool pixel = rowValue & (1 << col);
+      lc.setLed(0, row, col, pixel);
+    }
+  }
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Game handling functions
 void startGame() {
-  currentPos = random(matrixSize * matrixSize);  // random starting position in the top-left corner
+  currentPos = random(matrixSize * matrixSize);
   randomSeed(analogRead(A3));
   generateRandomMap();
   lc.setLed(0, currentPos % matrixSize, currentPos / matrixSize, pixelState);
-  score = 0;                   // reset score
-  wallsDestroyed = 0;          // reset walls destroyed
-  timePlayedStart = millis();  // reset time
+  score = 0;
+  wallsDestroyed = 0;
+  timePlayedStart = millis();
 }
 
 void handleGameLogic() {
@@ -1431,12 +1419,37 @@ void handleGameOver() {
     menuNeedsUpdate = true;
   }
 }
-// new loop:
-void loop() {
-  handleMenuLogic();
-}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Wall functions
+void updateMatrix() {
+  int startX, startY;
+  switch (currentRoom) {
+    case TOP_LEFT:
+      startX = 0;
+      startY = 0;
+      break;
+    case TOP_RIGHT:
+      startX = 8;
+      startY = 0;
+      break;
+    case BOTTOM_LEFT:
+      startX = 0;
+      startY = 8;
+      break;
+    case BOTTOM_RIGHT:
+      startX = 8;
+      startY = 8;
+      break;
+  }
+
+  for (int i = 0; i < 8; i++) {
+    for (int j = 0; j < 8; j++) {
+      lc.setLed(0, i, j, walls[(startY + i) * bigMatrixSize + (startX + j)]);
+    }
+  }
+}  // function to display the walls
+
 int wallsLeft() {
   int wallsLeft = 0;
   for (int i = 0; i < bigMatrixSize * bigMatrixSize; ++i) {
@@ -1505,35 +1518,7 @@ int getAdjustedPosition(int position) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Player movement
 
-void updateMatrix() {
-  int startX, startY;
-  switch (currentRoom) {
-    case TOP_LEFT:
-      startX = 0;
-      startY = 0;
-      break;
-    case TOP_RIGHT:
-      startX = 8;
-      startY = 0;
-      break;
-    case BOTTOM_LEFT:
-      startX = 0;
-      startY = 8;
-      break;
-    case BOTTOM_RIGHT:
-      startX = 8;
-      startY = 8;
-      break;
-  }
-
-  for (int i = 0; i < 8; i++) {
-    for (int j = 0; j < 8; j++) {
-      lc.setLed(0, i, j, walls[(startY + i) * bigMatrixSize + (startX + j)]);
-    }
-  }
-}
-
-void handleMovement() {
+void handleMovement() {  // handles joystick inputs and computes next position
   xValue = analogRead(pinX);
   yValue = analogRead(pinY);
 
