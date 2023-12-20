@@ -41,4 +41,4 @@ In "Shooter Mania", you traverse through different rooms, each one represents a 
 
 This project is a personal endeavor to bring the excitement of shooter games into a compact and interactive format. The concept was chosen to explore matrix manipulation and challenge my programming skills.
 
-Here is a video to see the game in action: ![Game in Action](https://www.youtube.com/watch?v=2JPhsQezhdY)
+Here is a video to see the game in action: https://www.youtube.com/watch?v=2JPhsQezhdY
