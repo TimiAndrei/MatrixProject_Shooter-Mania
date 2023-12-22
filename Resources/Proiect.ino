@@ -8,6 +8,7 @@ struct Highscore {
   int score;
 };
 const int maxPlayers = 5;
+const int notInTop = 6;
 Highscore highscores[maxPlayers];
 
 // Custom chars
@@ -167,6 +168,7 @@ bool infoScreen2Flag = false;
 // Bullet variables
 int bulletPos = 0;
 int lastBulletPos = 0;
+const unsigned long bulletMoveDelay = 40;
 unsigned long lastBulletBlinkMillis = 0;
 const int bulletBlinkTime = 200;
 bool bulletFired = false;
@@ -175,6 +177,7 @@ bool bulletFired = false;
 int currentPos = 0;
 int score = 0;
 int wallsDestroyed = 0;
+const int neighbours = 4;
 unsigned long timePlayedStart = 0;
 unsigned long timePlayed = 0;
 const unsigned long timeLimit = 60000;
@@ -202,6 +205,9 @@ volatile int lastMovement = LEFT;
 
 // wall constants
 int wallPercentage = 10;
+const int easyWallPercentage = 10;
+const int mediumWallPercentage = 30;
+const int hardWallPercentage = 50;
 const int maxWallPercentage = 100;
 bool walls[bigMatrixSize * bigMatrixSize];
 
@@ -232,6 +238,10 @@ char currentName[5] = "    ";
 int letterIndex = 0;
 int charIndex = 0;
 bool isNameInputComplete = false;
+const int maxNameCharacters = 36;
+const int alphabet = 26;
+const int lastNamePos = 4;
+const int maxLetterIndex = 3;
 int charIndexes[4] = { 0, 0, 0, 0 };
 
 ////// LCD
@@ -349,18 +359,22 @@ unsigned long gameOverTime = 0;
 const int gameOverTimeDelay = 3000;
 DifficultyItems gameDifficulty = EASY;
 
-// Matrix rooms/quarters
+// Matrix rooms/quarters variables
 enum Rooms {
   TOP_LEFT,
   TOP_RIGHT,
   BOTTOM_LEFT,
   BOTTOM_RIGHT
 };
+const int rightRowStartIndex = 56;
+const int leftRowLastIndex = 7;
+const int leftBigRowStartIndex = 128;
+const int leftBigRowLastIndex = 143;
 
 Rooms currentRoom = TOP_LEFT;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Settings functions
+// Settings function
 
 void loadSettings() {
   displayContrast = EEPROM.read(addrLcdContrast);
@@ -407,19 +421,20 @@ void loop() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Map generation functions
-void generateRandomMap() {
-  memset(walls, 0, sizeof(walls));
 
-  if (gameDifficulty == EASY) {
-    wallPercentage = 10;
+void generateRandomMap() {
+  memset(walls, 0, sizeof(walls));  // we initialize everything with 0 (not needed usually, but just to be sure)
+
+  if (gameDifficulty == EASY) {  // we check for the game difficulty and set the starting game constants as needed
+    wallPercentage = easyWallPercentage;
     bonusMultiplier = easyMultiplier;
     baseScore = easyBaseScore;
   } else if (gameDifficulty == MEDIUM) {
-    wallPercentage = 30;
+    wallPercentage = mediumWallPercentage;
     bonusMultiplier = mediumMultiplier;
     baseScore = mediumBaseScore;
   } else if (gameDifficulty == HARD) {
-    wallPercentage = 50;
+    wallPercentage = hardWallPercentage;
     bonusMultiplier = hardMultiplier;
     baseScore = hardBaseScore;
   }
@@ -427,25 +442,25 @@ void generateRandomMap() {
 
   for (int i = 0; i < bigMatrixSize * bigMatrixSize; ++i) {
     if (i == currentPos || isNeighbor(i)) {
-      continue;
+      continue;  // skip generating walls next to the player
     }
     if (isLeftEdgeOfRightQuarters(i) || isTopRowOfBottomQuarters(i)) {
-      continue;  // Skip generating walls on specified edges
+      continue;  // skip generating walls on specified edges
     }
-    int randomValue = random(maxWallPercentage);
-    walls[i] = randomValue < wallPercentage;
+    int randomValue = random(maxWallPercentage);  // we fill the walls array randomly utilising the fact that random() is uniformly distributed
+    walls[i] = randomValue < wallPercentage;      // so we compare the value to the wallPercentage and we will get roughly the number of walls expected for that percentage
   }
   updateMatrix();
 }
 
-bool isNeighbor(int position) {
-  int neighbors[4] = {
+bool isNeighbor(int position) {  // function that computes neighbours of player's random starting position
+  int neighbors[neighbours] = {
     currentPos + bigMatrixSize,
     currentPos - bigMatrixSize,
     currentPos - 1,
     currentPos + 1
   };
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < neighbours; i++) {
     if (position == neighbors[i]) {
       return true;
     }
@@ -453,9 +468,8 @@ bool isNeighbor(int position) {
   return false;
 }
 
-bool isLeftEdgeOfRightQuarters(int position) {
-  // Check if position is on the left edge of the RIGHT quarters
-  for (int i = 8; i < bigMatrixSize * bigMatrixSize; i += 16) {
+bool isLeftEdgeOfRightQuarters(int position) {  // we check if position is on the left edge of the RIGHT quarters
+  for (int i = matrixSize; i < bigMatrixSize * bigMatrixSize; i += bigMatrixSize) {
     if (position == i) {
       return true;
     }
@@ -463,10 +477,10 @@ bool isLeftEdgeOfRightQuarters(int position) {
   return false;
 }
 
-bool isTopRowOfBottomQuarters(int position) {
-  // Check if position is in the top row of the BOTTOM quarters
-  return (position >= 128 && position <= 143);
-}  // functions to permit the player to have space to traverse through rooms
+bool isTopRowOfBottomQuarters(int position) {  // we check if position is in the top row of the BOTTOM quarters
+  return (position >= leftBigRowStartIndex && position <= leftBigRowLastIndex);
+}
+// functions above are to permit the player to have space to traverse through rooms
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Highscore functions
@@ -481,35 +495,35 @@ void resetHighscores() {
   }
 }
 
-void writeHighscore(int address, const Highscore &highscore) {
-  const byte *p = (const byte *)(const void *)&highscore;
-  int i;
-  for (i = 0; i < sizeof(Highscore); i++) {
-    EEPROM.update(address++, *p++);
+void writeHighscore(int address, const Highscore &highscore) {  // function that writes the Highscore in EEPROM
+  const byte *p = (const byte *)(const void *)&highscore;       // we cast the highscore struct to a byte pointer (from the general pointer const void)
+  int i;                                                        // *used const pointer to indicate that it points to a constant value
+  for (i = 0; i < sizeof(Highscore); i++) {                     // we iterate over each byte of the highscore and update the EEPROM
+    EEPROM.update(address++, *p++);                             // after updating the EEPROM we increment the address by 1 byte
   }
 }
 
-void readHighscore(int address, Highscore &highscore) {
-  byte *p = (byte *)(void *)&highscore;
+void readHighscore(int address, Highscore &highscore) {  // function that reads the Highscore from EEPROM
+  byte *p = (byte *)(void *)&highscore;                  // cast to byte pointer
   int i;
-  for (i = 0; i < sizeof(Highscore); i++) {
+  for (i = 0; i < sizeof(Highscore); i++) {  // similar to the write function, we read the highscore byte by byte
     *p++ = EEPROM.read(address++);
   }
 }
 
-void saveHighscore(const Highscore &highscore, int slot) {
+void saveHighscore(const Highscore &highscore, int slot) {  // function that saves the highscore at the address calculated based on what position the highscore is
   int address = addrHighscoreStart + slot * sizeof(Highscore);
   writeHighscore(address, highscore);
 }
 
-Highscore readHighscore(int slot) {
+Highscore readHighscore(int slot) {  // function that reads the highscore from the ranking position(slot) specified
   Highscore highscore;
   int address = addrHighscoreStart + slot * sizeof(Highscore);
   readHighscore(address, highscore);
   return highscore;
 }
 
-// Read existing highscores and find the right position for the new score
+// we read existing highscores and find the right position for the new score
 void insertHighscore(const Highscore &newHighscore) {
   Highscore currentHighscores[5];
   bool nameFound = false;
@@ -519,7 +533,7 @@ void insertHighscore(const Highscore &newHighscore) {
     currentHighscores[i] = readHighscore(i);
   }
 
-  // Check if the name already exists and update the score if it's higher
+  // check if the name already exists and update the score if it's higher
   for (int i = 0; i < 5; i++) {
     if (strcmp(newHighscore.playerName, currentHighscores[i].playerName) == 0) {
       if (newHighscore.score > currentHighscores[i].score) {
@@ -530,7 +544,7 @@ void insertHighscore(const Highscore &newHighscore) {
     }
   }
 
-  // Find the position where the new highscore should be inserted if the name wasn't found
+  // find the position where the new highscore should be inserted if the name wasn't found
   if (!nameFound) {
     for (int i = 0; i < 5; i++) {
       if (newHighscore.score > currentHighscores[i].score) {
@@ -540,7 +554,7 @@ void insertHighscore(const Highscore &newHighscore) {
     }
   }
 
-  // Insert the new highscore if a position was found
+  // insert the new highscore if a position was found
   if (insertPosition != -1) {
     for (int i = 4; i > insertPosition; i--) {
       currentHighscores[i] = currentHighscores[i - 1];
@@ -548,7 +562,7 @@ void insertHighscore(const Highscore &newHighscore) {
     currentHighscores[insertPosition] = newHighscore;
   }
 
-  // Save updated highscores
+  // save updated highscores
   for (int i = 0; i < 5; i++) {
     saveHighscore(currentHighscores[i], i);
   }
@@ -563,24 +577,25 @@ bool checkIfBeatHighscore() {
   return false;
 }
 
-void updateHighscores() {
+void updateHighscores() {  // we initialize the highscores in a global variable
   for (int i = 0; i < 5; i++) {
     highscores[i] = readHighscore(i);
   }
 }
 
-int getRanking() {
+int getRanking() {  //function that gets the ranking of the current player by comparing the score with the leaderboard
   for (int i = 0; i < 5; i++) {
     if (score > highscores[i].score) {
       return i;
     }
   }
-  return 6;
+  return notInTop;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Name functions
-void handleNameInput() {
+
+void handleNameInput() {  // function that checks for joystick input and updates the current letter as needed
   xValue = analogRead(pinX);
   yValue = analogRead(pinY);
 
@@ -588,34 +603,34 @@ void handleNameInput() {
   if (xValue > maxValue) {
     if (prevXValue <= maxValue || currentMillis - lastXMoveTime > autoRepeatDelay) {
       lastXMoveTime = currentMillis;
-      charIndexes[letterIndex] = (charIndexes[letterIndex] + 1) % 36;  // Loop from '9' back to 'A'
+      charIndexes[letterIndex] = (charIndexes[letterIndex] + 1) % maxNameCharacters;  // loop from '9' back to 'A'
       menuNeedsUpdate = true;
     }
   } else if (xValue < minValue) {
     if (prevXValue >= minValue || currentMillis - lastXMoveTime > autoRepeatDelay) {
       lastXMoveTime = currentMillis;
-      charIndexes[letterIndex] = (charIndexes[letterIndex] + 35) % 36;  // Loop from 'A' back to '9'
+      charIndexes[letterIndex] = (charIndexes[letterIndex] + (maxNameCharacters - 1)) % maxNameCharacters;  // loop from 'A' back to '9'
       menuNeedsUpdate = true;
     }
   }
 
-  if (charIndexes[letterIndex] < 26) {
+  if (charIndexes[letterIndex] < alphabet) {
     currentName[letterIndex] = 'A' + charIndexes[letterIndex];
   } else {
-    currentName[letterIndex] = '0' + (charIndexes[letterIndex] - 26);
+    currentName[letterIndex] = '0' + (charIndexes[letterIndex] - alphabet);
   }
 
   if ((yValue < minValue && prevYValue >= minValue) || (yValue > maxValue && prevYValue <= maxValue)) {
-    letterIndex = constrain(letterIndex + (yValue < minValue ? 1 : -1), 0, 3);
+    letterIndex = constrain(letterIndex + (yValue < minValue ? 1 : -1), 0, maxLetterIndex);
     menuNeedsUpdate = true;
   }
 
   bool currentButtonState = digitalRead(pinSW);
-  if (currentButtonState == LOW && lastButtonState == HIGH) {
+  if (currentButtonState == LOW && lastButtonState == HIGH) {  // if we press the button, we save the highscore
     if (millis() - lastDebounceTime > debounceDelay) {
       Highscore playerHighscore;
       strncpy(playerHighscore.playerName, currentName, sizeof(playerHighscore.playerName));
-      playerHighscore.playerName[4] = '\0';
+      playerHighscore.playerName[lastNamePos] = '\0';
       playerHighscore.score = score;
       insertHighscore(playerHighscore);
       updateHighscores();
@@ -650,12 +665,12 @@ void displayCurrentName() {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Adjust functions
-void adjustMatrixBrightness() {
+void adjustMatrixBrightness() {  // function that checks for joystick input and updates the matrix brightness
   yValue = analogRead(pinY);
 
   if (yValue > maxValue && prevYValue <= maxValue && tempMatrixBrightness > 0) {
     tempMatrixBrightness--;
-    lc.setIntensity(0, tempMatrixBrightness);
+    lc.setIntensity(0, tempMatrixBrightness);  // we update the brightness in real time
     menuNeedsUpdate = true;
   } else if (yValue < minValue && prevYValue >= minValue && tempMatrixBrightness < maxMatrixBrightness) {
     tempMatrixBrightness++;
@@ -665,7 +680,7 @@ void adjustMatrixBrightness() {
   prevYValue = yValue;
 
   bool currentButtonState = digitalRead(pinSW);
-  if (currentButtonState == LOW && lastButtonState == HIGH) {
+  if (currentButtonState == LOW && lastButtonState == HIGH) {  // on button press we update the setting in EEPROM
     if (millis() - lastDebounceTime > debounceDelay) {
       matrixBrightness = tempMatrixBrightness;
       EEPROM.update(addrMatrixBrightness, matrixBrightness);
@@ -677,13 +692,13 @@ void adjustMatrixBrightness() {
   lastButtonState = currentButtonState;
 }
 
-void adjustLcdContrast() {
+void adjustLcdContrast() {  // function that checks for joystick input and updates the LCD contrast
   yValue = analogRead(pinY);
-  stepSize = maxContrast / maxLCDDisplayLength;
+  stepSize = maxContrast / maxLCDDisplayLength;  // in this case we took the maxContrast range and divided it into steps based on the LCD length (16)
 
   if (yValue > maxValue && prevYValue <= maxValue && tempLcdContrast - stepSize > 0) {
     tempLcdContrast -= stepSize;
-    analogWrite(contrastPin, tempLcdContrast);
+    analogWrite(contrastPin, tempLcdContrast);  // we update the contrast in real time
     menuNeedsUpdate = true;
   }
 
@@ -695,7 +710,7 @@ void adjustLcdContrast() {
   prevYValue = yValue;
 
   bool currentButtonState = digitalRead(pinSW);
-  if (currentButtonState == LOW && lastButtonState == HIGH) {
+  if (currentButtonState == LOW && lastButtonState == HIGH) {  // on button press we update the contrast in EEPROM
     if (millis() - lastDebounceTime > debounceDelay) {
       displayContrast = tempLcdContrast;
       EEPROM.update(addrLcdContrast, displayContrast);
@@ -707,7 +722,7 @@ void adjustLcdContrast() {
   lastButtonState = currentButtonState;
 }
 
-void adjustLcdBrightness() {
+void adjustLcdBrightness() {  // similar to the adjustLcdContrast function
   yValue = analogRead(pinY);
   stepSize = maxBrightness / maxLCDDisplayLength;
 
@@ -738,9 +753,11 @@ void adjustLcdBrightness() {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // LCD and Menu functions
 
-void handleMenuNavigation() {
+void handleMenuNavigation() {  // function that handles the menu navigation with the joystick (up and down movement)
   int previousMenuItem = currentMenuItem;
   xValue = analogRead(pinX);
+
+  // the logic is that we have enums for each menu and submenu, and we have different max number of items for each menu, and we limit the scrolling to the last item
 
   if (xValue > maxValue && prevXValue <= maxValue) {
     if (currentMenuState == MAIN_MENU) {
@@ -789,7 +806,7 @@ void handleMenuNavigation() {
   if (xValue < minValue && prevXValue >= minValue) {
     currentMenuItem--;
     if (currentMenuItem <= 0) {
-      currentMenuItem = 0;  // Limit scrolling to the first menu item
+      currentMenuItem = 0;  // limit scrolling to the first menu item
     }
   }
 
@@ -802,7 +819,7 @@ void handleMenuNavigation() {
 }
 
 
-void displayMenu() {
+void displayMenu() {  // function that displays each menu/submenu based on the current menu state and item
   if (menuNeedsUpdate) {
     lcd.clear();
     lcd.setCursor(0, 0);
@@ -815,7 +832,6 @@ void displayMenu() {
         lcd.write((byte)1);
       else
         lcd.write((byte)2);
-
 
       lcd.setCursor(0, 1);
       switch (currentMenuItem) {
@@ -1111,7 +1127,7 @@ void displayMenu() {
           break;
         case SCREEN_2_INFO_6:
           lcd.print(">Ranking:");
-          if (getRanking() == 6) {
+          if (getRanking() == notInTop) {
             lcd.print("N/A");
           } else {
             lcd.print(getRanking());
@@ -1135,7 +1151,7 @@ void displayMenu() {
   }
 }
 
-void selectMenuItem() { //function that handles selection when when button is pressed in Menu state
+void selectMenuItem() {  //function that handles selection when when button is pressed in Menu state
   switch (currentMenuState) {
     case MAIN_MENU:
       switch (currentMenuItem) {
@@ -1286,10 +1302,10 @@ void selectMenuItem() { //function that handles selection when when button is pr
   menuNeedsUpdate = true;
 }
 
-void handleMenuLogic() {
+void handleMenuLogic() { // function that handles the MENU and GAME states
   if (currentState == MENU) {
-    if (currentMenuState == MATRIX_BRIGHTNESS_ADJUST) {
-      adjustMatrixBrightness();
+    if (currentMenuState == MATRIX_BRIGHTNESS_ADJUST) { 
+      adjustMatrixBrightness(); // functions like this needed to be called in the loop for constant updates
     }
     if (currentMenuState == LCD_CONTRAST_ADJUST) {
       adjustLcdContrast();
@@ -1362,7 +1378,7 @@ void displayGameOver() {
   lcd.print(score);
 }
 
-void displayMatrixPattern(uint64_t pattern) {
+void displayMatrixPattern(uint64_t pattern) { // function to display the matrix patter stored as uint64_t
   for (int row = 0; row < matrixSize; row++) {
     uint8_t rowValue = (pattern >> (matrixSize * row)) & 0xFF;
 
@@ -1375,17 +1391,17 @@ void displayMatrixPattern(uint64_t pattern) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Game handling functions
-void startGame() {
-  currentPos = random(matrixSize * matrixSize);
-  randomSeed(analogRead(A3));
-  generateRandomMap();
-  lc.setLed(0, currentPos % matrixSize, currentPos / matrixSize, pixelState);
+void startGame() { // function that 
+  currentPos = random(matrixSize * matrixSize); // generates random starting position for player
+  randomSeed(analogRead(A3));                   // change the seed by reading random value on Analog input pin
+  generateRandomMap();                          // generate the map
+  lc.setLed(0, currentPos % matrixSize, currentPos / matrixSize, pixelState); //(not needed, but used to instantly light up the player on game start)
   score = 0;
   wallsDestroyed = 0;
   timePlayedStart = millis();
 }
 
-void handleGameLogic() {
+void handleGameLogic() { // function that checks handles the game state, player and bullet movement
   if (areAllWallsRemoved()) {
     displayMatrixPattern(matrixPatterns[6]);
     currentState = MENU;
@@ -1405,7 +1421,7 @@ void handleGameLogic() {
   handleBulletMovement();
 }
 
-void handleGameOver() {
+void handleGameOver() { //function that handles the game over state
   static unsigned long gameOverTime = 0;
 
   if (gameOverTime == 0) {
@@ -1422,7 +1438,7 @@ void handleGameOver() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Wall functions
-void updateMatrix() {
+void updateMatrix() { // function that displays the walls on the 8x8 physical matrix
   int startX, startY;
   switch (currentRoom) {
     case TOP_LEFT:
@@ -1443,12 +1459,12 @@ void updateMatrix() {
       break;
   }
 
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < 8; i++) { 
     for (int j = 0; j < 8; j++) {
-      lc.setLed(0, i, j, walls[(startY + i) * bigMatrixSize + (startX + j)]);
+      lc.setLed(0, i, j, walls[(startY + i) * bigMatrixSize + (startX + j)]);  // turns on the led if there's a wall on the position calculated based on the current room
     }
   }
-}  // function to display the walls
+}  
 
 int wallsLeft() {
   int wallsLeft = 0;
@@ -1484,7 +1500,7 @@ void removeWall(int position) {
   updateMatrix();  // Update the matrix to reflect the change
 }
 
-int getAdjustedPosition(int position) {
+int getAdjustedPosition(int position) { // helper function to compute the current physical matrix position from the 16x16 walls array based on the current room
   int x = position % matrixSize;
   int y = position / matrixSize;
   int startX, startY;
@@ -1541,30 +1557,31 @@ void handleMovement() {  // handles joystick inputs and computes next position
   prevYValue = yValue;
 }
 
-int movePlayer(int currentPos, int direction) {
+
+int movePlayer(int currentPos, int direction) {  // function that checks for joystick movement and computes the player movement checking for what room it is on as well
   int newPos = currentPos;
   lc.setLed(0, currentPos % bigMatrixSize, currentPos / bigMatrixSize, LOW);
   playerState = moving;
-  if (direction == UP) {
-    if (currentRoom == TOP_LEFT && currentPos >= 56) {
+  if (direction == UP) {  // we check for the direction we're going and check if we're able to move to another room based on the current room
+    if (currentRoom == TOP_LEFT && currentPos >= rightRowStartIndex) {
       currentRoom = TOP_RIGHT;
-      newPos = currentPos - 56;
-    } else if (currentRoom == BOTTOM_LEFT && currentPos >= 56) {
+      newPos = currentPos - rightRowStartIndex;
+    } else if (currentRoom == BOTTOM_LEFT && currentPos >= rightRowStartIndex) {
       currentRoom = BOTTOM_RIGHT;
-      newPos = currentPos - 56;
+      newPos = currentPos - rightRowStartIndex;
     }
-    if (currentPos < matrixSize * (matrixSize - 1) && !isWall(currentPos + matrixSize)) {
+    if (currentPos < matrixSize * (matrixSize - 1) && !isWall(currentPos + matrixSize)) {  // there are also the physical matrix and wall constraints checked
       newPos = currentPos + matrixSize;
       lastMovement = UP;
     }
-  }
+  }  // the rest of the ifs are similar, but for the other directions and specific rooms
   if (direction == DOWN) {
-    if (currentRoom == TOP_RIGHT && currentPos <= 7) {
+    if (currentRoom == TOP_RIGHT && currentPos <= leftRowLastIndex) {
       currentRoom = TOP_LEFT;
-      newPos = currentPos + 56;
-    } else if (currentRoom == BOTTOM_RIGHT && currentPos <= 7) {
+      newPos = currentPos + rightRowStartIndex;
+    } else if (currentRoom == BOTTOM_RIGHT && currentPos <= leftRowLastIndex) {
       currentRoom = BOTTOM_LEFT;
-      newPos = currentPos + 56;
+      newPos = currentPos + rightRowStartIndex;
     }
 
     if (currentPos >= matrixSize && !isWall(currentPos - matrixSize)) {
@@ -1575,10 +1592,10 @@ int movePlayer(int currentPos, int direction) {
   if (direction == LEFT) {
     if (currentRoom == BOTTOM_LEFT && currentPos % matrixSize == 0) {
       currentRoom = TOP_LEFT;
-      newPos = currentPos + 7;
+      newPos = currentPos + leftRowLastIndex;
     } else if (currentRoom == BOTTOM_RIGHT && currentPos % matrixSize == 0) {
       currentRoom = TOP_RIGHT;
-      newPos = currentPos + 7;
+      newPos = currentPos + leftRowLastIndex;
     }
     if (currentPos % matrixSize != 0 && !isWall(currentPos - 1)) {
       newPos = currentPos - 1;
@@ -1587,12 +1604,12 @@ int movePlayer(int currentPos, int direction) {
   }
   if (direction == RIGHT) {
 
-    if (currentRoom == TOP_LEFT && currentPos % matrixSize == 7) {
+    if (currentRoom == TOP_LEFT && currentPos % matrixSize == leftRowLastIndex) {
       currentRoom = BOTTOM_LEFT;
-      newPos = currentPos - 7;
-    } else if (currentRoom == TOP_RIGHT && currentPos % matrixSize == 7) {
+      newPos = currentPos - leftRowLastIndex;
+    } else if (currentRoom == TOP_RIGHT && currentPos % matrixSize == leftRowLastIndex) {
       currentRoom = BOTTOM_RIGHT;
-      newPos = currentPos - 7;
+      newPos = currentPos - leftRowLastIndex;
     }
     if ((currentPos + 1) % matrixSize != 0 && !isWall(currentPos + 1)) {
       newPos = currentPos + 1;
@@ -1603,7 +1620,7 @@ int movePlayer(int currentPos, int direction) {
   return newPos;
 }
 
-void handleBlinking() {
+void handleBlinking() {  // player blinking function
   unsigned long currentMillis = millis();
 
   if (areAllWallsRemoved()) {
@@ -1678,23 +1695,22 @@ void playCollisionSound() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Bullet functions
 
-void fireBullet() {
+void fireBullet() {  // function to initiate the bullet action, starting from the player's position (currentPos)
   bulletFired = true;
   bulletPos = currentPos;
   lastBulletPos = currentPos;
   playSound();
 }
 
-void handleBulletMovement() {
+void handleBulletMovement() {  // function that makes the bullet move across the 8x8 maatrix
   static unsigned long lastBulletMoveMillis = 0;
-  const unsigned long bulletMoveDelay = 40;
 
   if (bulletFired) {
     unsigned long currentMillis = millis();
-    switchBulletLed(bulletPos, true);
-    if (currentMillis - lastBulletMoveMillis >= bulletMoveDelay) {
-      switchBulletLed(lastBulletPos, false);
-      lastBulletPos = bulletPos;
+    switchBulletLed(bulletPos, true);                               // we instantly light up the led for the current bullet position
+    if (currentMillis - lastBulletMoveMillis >= bulletMoveDelay) {  // we add a clock to wait some delay before the bullet goes to the next position
+      switchBulletLed(lastBulletPos, false);                        // we turn off the led for the last position
+      lastBulletPos = bulletPos;                                    // in each if we check if below, we check if the next position is valid based on the direction the bullet is going
       if (lastMovement == UP && bulletPos < matrixSize * (matrixSize - 1) && !isWall(bulletPos + matrixSize)) {
         bulletPos = bulletPos + matrixSize;
       } else if (lastMovement == DOWN && bulletPos >= matrixSize && !isWall(bulletPos - matrixSize)) {
@@ -1704,7 +1720,7 @@ void handleBulletMovement() {
       } else if (lastMovement == RIGHT && (bulletPos + 1) % matrixSize != 0 && !isWall(bulletPos + 1)) {
         bulletPos = bulletPos + 1;
       } else {
-        if (isWall(computeBulletNextPos())) {
+        if (isWall(computeBulletNextPos())) {  // if there's no position valid, we check if we hit a wall and apply collision logic and we update the score
           playCollisionSound();
           removeWall(computeBulletNextPos());
           wallsDestroyed++;
@@ -1717,17 +1733,17 @@ void handleBulletMovement() {
       }
       lastBulletMoveMillis = currentMillis;
     }
-    switchBulletLed(bulletPos, false);
+    switchBulletLed(bulletPos, false);  // we turn off the led on current position
   }
 }
 
-void switchBulletLed(int position, bool state) {
+void switchBulletLed(int position, bool state) {  // helper function to mturn the led on/off
   if (position != -1 && position != currentPos) {
     lc.setLed(0, position % matrixSize, position / matrixSize, state);
   }
 }
 
-int computeBulletNextPos() {
+int computeBulletNextPos() {  // helper function to calculate the next position the bullet should be going
   if (lastMovement == UP && bulletPos < matrixSize * (matrixSize - 1)) {
     return bulletPos + matrixSize;
   } else if (lastMovement == DOWN && bulletPos >= matrixSize) {
@@ -1749,14 +1765,14 @@ void handleInterrupt() {
     interruptTime = micros();
   }
 
-  if (interruptTime - lastInterruptTime > debounceDelay * 1000) {
+  if (interruptTime - lastInterruptTime > debounceDelay * second) {
     if (buttonState != buttonRead) {
       buttonState = buttonRead;
     }
-    if (buttonState == LOW) {
+    if (buttonState == LOW) {  // if we press the game and we're in Game state, then we fire a bullet
       if (currentState == GAME) {
         fireBullet();
-      } else if (currentState == MENU) {
+      } else if (currentState == MENU) {  // else if we're in Menu state we make a select action in menu
         playSound();
         selectMenuItem();
       }
